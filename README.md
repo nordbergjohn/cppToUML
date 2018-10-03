@@ -12,7 +12,7 @@ The occurence of `};` on an empty row is interpreted as *done parsing current cl
 class Example {  // <- Begin parsing Example
   class Nested { // <- Start parsing Nested
     int m_var;   // <- Add variable to currently parsed class (Nested)
-  };             // <- Finish parsing nested
+  };             // <- Finish parsing Nested
   double m_var   // <- Add variable to currently parsed class (Example)
 };               // <- Finish parsing Example
 ```cpp
@@ -20,10 +20,10 @@ class Example {  // <- Begin parsing Example
 A class or struct followed by `:` is parsed for inheritance until reading an opening brace.
 Multiline inheritance is covered when the class and `{` is not on the same line:
 ```cpp
-struct child : public FirstParent,    // <- Begin parsing Child, add FirstParent to inheritance
+struct Child : public FirstParent,    // <- Begin parsing Child, add FirstParent to inheritance
                private SecondParent,  // <- add SecondParent to inheritance
                protected ThirdParent  // <- add ThirdParent to inheritance
-{                                     // <- Inheritance done, continue parsing child
+{                                     // <- Inheritance done, continue parsing Child
 };                                    // <- Finish parsing Child struct
 ```cpp
 
@@ -32,6 +32,8 @@ struct child : public FirstParent,    // <- Begin parsing Child, add FirstParent
 - [x] Single line member functions
 - [x] single line member variables
 - [x] Nested classes
+- [x] public, private and protected inheritance.
+- [x] public, private and protected access modifiers.
 - [x] Multiline inheritance
 - [ ] Multiline comments using `/**/`
 - [ ] Multiline member functions
