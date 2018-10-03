@@ -15,7 +15,7 @@ class Example {  // <- Begin parsing Example
   };             // <- Finish parsing Nested
   double m_var   // <- Add variable to currently parsed class (Example)
 };               // <- Finish parsing Example
-```cpp
+```
 
 A class or struct followed by `:` is parsed for inheritance until reading an opening brace.
 Multiline inheritance is covered when the class and `{` is not on the same line:
@@ -25,7 +25,7 @@ struct Child : public FirstParent,    // <- Begin parsing Child, add FirstParent
                protected ThirdParent  // <- add ThirdParent to inheritance
 {                                     // <- Inheritance done, continue parsing Child
 };                                    // <- Finish parsing Child struct
-```cpp
+```
 
 ## Covers the following cases
 
