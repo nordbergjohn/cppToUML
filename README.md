@@ -35,9 +35,9 @@ struct Child : public FirstParent,    // <- Begin parsing Child, add FirstParent
 - [x] public, private and protected inheritance.
 - [x] public, private and protected access modifiers.
 - [x] Multiline inheritance
-- [ ] Multiline comments using `/**/`
-- [ ] Multiline member functions
-- [ ] Multiline member variables
+- [x] Multiline comments using `/**/`
+- [x] Multiline member functions
+- [x] Multiline member variables
 - [ ] Template member functions
 - [ ] Template member variables
 - [ ] Template classes

@@ -8,19 +8,29 @@ use StoreClass;
 
 my $help = '';
 GetOptions('h' => \$help, 'help' => \$help);
+#!/usr/bin/perl
+
+use Getopt::Long;
+
+# Needed on mac to find StoreClass.pm
+use lib '.';
+use StoreClass;
+
+my $help = '';
+GetOptions('h' => \$help, 'help' => \$help);
 
 sub printUsage {
-  print "Usage: ./generateUML <comma separated list of files containing C++ classes>\n\n";  
+  print "Usage: ./generateUML <comma separated list of files containing C++= classes>\n\n";
 
   print "Available flags:\n";
   print "\t-h,-help\tPrint help\n\n";
 }
 
 sub printExample {
-  print "Example usage:\t./.generateUML /path/to/header/file1 /path/to/header/file2\n";
+  print "Example usage:\t./.generateUML /path/to/header/file1 /path/to/head= er/file2\n";
   print "Output: \@plantuml output of given input files to stdout\n\n";
-  print "\@startuml\nParentClass <|-- File1\nclass File1 {\n+void publicMember()\n#int protectedVar;\n}\n\n";
-  print "ParentClass2 <|-- File2\nclass File2 {\n-void privateMember()\n}\n\@enduml\n";
+  print "\@startuml\nParentClass <|-- File1\nclass File1 {\n+void publicMem= ber()\n#int protectedVar;\n}\n\n";
+  print "ParentClass2 <|-- File2\nclass File2 {\n-void privateMember()\n}\n= \@enduml\n";
 }
 
 if($help)
@@ -29,6 +39,7 @@ if($help)
   printExample();
   exit;
 }
+
 
 if($#ARGV == -1)
 {
@@ -44,13 +55,58 @@ foreach(@ARGV)
 {
   my @openClasses = ();
   if(open(FILE, $_))
-  { 
-    my $parsingInheritance = 0;
+  {
+    my $multiLineInheritance = 0;
+    my $multiLineComment = 0;
+    my $multiLineVarOrFunc = 0;
+    my $multiLine = "";
     foreach (<FILE>)
     {
+      chomp;
+      # Start of multiline comment
+      if($_ =~ /(?:^\h*\/\*).*(?<!\*\/)/) {  $multiLineComment = 1; next; }
+
       # Skip if new line is empty or starts with a comment
       next if $_ =~ /^\h*(?:$|\/\/)/;
 
+      print ("LINE $_ mlVar $multiLineVarOrFunc\n");
+      if($multiLineComment)
+      {
+        if($_ =~ /\*\//) { $multiLineComment = 0; }
+        next;
+      }
+      elsif($multiLineInheritance)
+      {
+        $multiLine .= " $_";
+        if(index($_,'{') != -1)
+        {
+            # As we are parsing inheritance, we know that the array isn't e= mpty
+            my $class = $openClasses[-1];
+            $multiLineInheritance = 0;
+            while($multiLine =~ /(public|private|protected)\h+((?:\w+::)*\w+)/g)
+            {
+              $class->addParent($1,$2);
+            }
+            $multiLine = "";
+        }
+        next;
+      }
+      elsif($multiLineVarOrFunc)
+      {
+        $multiLine .= " $_";
+        if(index($_,';') != -1)
+        {
+          my $class = $openClasses[-1];
+          print "ML $multiLine\n";
+          $multiLineVarOrFunc = 0;
+          if(   $multiLine =~ /((?:\w+::)*\w+\h+\w+\(.*\));/) { $class->addMemberFunction($1);    }
+          elsif($multiLine =~ /((?:\w+::)*\w+\h+\w+);/)       { $class->addMemberVariable($1);    }
+          $multiLine = "";
+        }
+        next;
+      }
+
+      print("Not newline or empty\n");
       # When done with a class, go to next line
       if(@openClasses and $_ =~ /^};$/)
       {
@@ -64,20 +120,18 @@ foreach(@ARGV)
         my $class = new StoreClass("$1 $2");
         push @openClasses, $class;
 
-        if(index($_,":") != -1)
+        # If there is inheritance but the class opening braces
+        # aren't on the same line as class definition
+        if(index($_,":") != -1 and index($_,'{') == -1)
         {
-          $parsingInheritance = 1;
-          while($_ =~ /(public|private|protected)\h+((?:\w+::)*\w+)/g)
-          {
-            $class->addParent($1,$2);
-          }
+          $multiLineInheritance = 1;
+          $multiLine = $_;
+          next;
         }
 
-        # If class opening braces are on the same line as the parent classes
-        if(index($_,'{') != -1)
+        while($_ =~ /(public|private|protected)\h+((?:\w+::)*\w+)/g)
         {
-          $parsingInheritance = 0;
-          next;
+          $class->addParent($1,$2);
         }
       }
 
@@ -85,34 +139,15 @@ foreach(@ARGV)
       {
         my $class = $openClasses[-1];
 
-        # Check if currently parsing inheritance
-        if($parsingInheritance)
+        print("In openClasses\n");
+        if($_ =~ /^\h*(public|private|protected):/) { $class->changeAccessModifier($1); }
+        elsif($_ =~ /((?:\w+::)*\w+\h+\w+\(.*\));/) { print("ADDFUN\n");$class->addMemberFunction($1);    }
+        elsif($_ =~ /((?:\w+::)*\w+\h+\w+);/)       { print("ADDMEM\n");$class->addMemberVariable($1);    }
+        elsif($_ =~ /((?:\w+::)*\w+[\w\(,\h]+(?<!;$))/)     # No ending ';', multiline variable or function
         {
-          my $class = $openClasses[-1];
-          while($_ =~ /(public|private|protected)\h+((?:\w+::)*\w+)/g)
-          {
-            $class->addParent($1,$2);
-          }
-
-          # Parent class definitions done
-          if($_ =~ /{/)
-          {
-            $parsingInheritance = 0;
-            next;
-          }
-        }
-
-        if($_ =~ /^\h*(public|private|protected):/)
-        {
-          $class->changeAccessModifier($1);
-        }
-        elsif($_ =~ /(\w+ \w+\(.*\))/)
-        {
-          $class->addMemberFunction($1);
-        }
-        elsif($_ =~ /(\w+ \w+);/)
-        {
-          $class->addMemberVariable($1);
+            $multiLine = $_;
+            $multiLineVarOrFunc = 1;
+            print "First ML: $multiLine\n";
         }
       }
     }
