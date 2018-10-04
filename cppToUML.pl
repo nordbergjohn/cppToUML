@@ -69,7 +69,6 @@ foreach(@ARGV)
       # Skip if new line is empty or starts with a comment
       next if $_ =~ /^\h*(?:$|\/\/)/;
 
-      print ("LINE $_ mlVar $multiLineVarOrFunc\n");
       if($multiLineComment)
       {
         if($_ =~ /\*\//) { $multiLineComment = 0; }
@@ -97,7 +96,6 @@ foreach(@ARGV)
         if(index($_,';') != -1)
         {
           my $class = $openClasses[-1];
-          print "ML $multiLine\n";
           $multiLineVarOrFunc = 0;
           if(   $multiLine =~ /((?:\w+::)*\w+\h+\w+\(.*\));/) { $class->addMemberFunction($1);    }
           elsif($multiLine =~ /((?:\w+::)*\w+\h+\w+);/)       { $class->addMemberVariable($1);    }
@@ -106,7 +104,6 @@ foreach(@ARGV)
         next;
       }
 
-      print("Not newline or empty\n");
       # When done with a class, go to next line
       if(@openClasses and $_ =~ /^};$/)
       {
@@ -133,21 +130,19 @@ foreach(@ARGV)
         {
           $class->addParent($1,$2);
         }
+        next;
       }
 
       if(@openClasses)
       {
         my $class = $openClasses[-1];
-
-        print("In openClasses\n");
         if($_ =~ /^\h*(public|private|protected):/) { $class->changeAccessModifier($1); }
-        elsif($_ =~ /((?:\w+::)*\w+\h+\w+\(.*\));/) { print("ADDFUN\n");$class->addMemberFunction($1);    }
-        elsif($_ =~ /((?:\w+::)*\w+\h+\w+);/)       { print("ADDMEM\n");$class->addMemberVariable($1);    }
+        elsif($_ =~ /((?:\w+::)*\w+\h+\w+\(.*\));/) { $class->addMemberFunction($1);    }
+        elsif($_ =~ /((?:\w+::)*\w+\h+\w+);/)       { $class->addMemberVariable($1);    }
         elsif($_ =~ /((?:\w+::)*\w+[\w\(,\h]+(?<!;$))/)     # No ending ';', multiline variable or function
         {
             $multiLine = $_;
             $multiLineVarOrFunc = 1;
-            print "First ML: $multiLine\n";
         }
       }
     }
