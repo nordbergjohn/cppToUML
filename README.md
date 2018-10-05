@@ -4,6 +4,10 @@ Convert C++ files to plantuml
 ## Usage:
 perl cppToUML <1 to N c++ source files>
 
+With a repo at '/repo/example' an UML png of all classes in that directory could be generated like this:
+
+perl cppToUML /repo/example/\* | plantuml -pipe > example.uml 
+
 ## Assumptions
 Class parsing starts on a line with any amount of whitespace prior to the class or struct keyword.
 The occurence of `};` on an empty row is interpreted as *done parsing current class*, as shown in the example below

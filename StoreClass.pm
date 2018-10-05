@@ -23,9 +23,12 @@ sub new
   # Init class or struct
   my $self = { name => shift };
 
-
+  # class or struct give private or public access modifier
   $self->{accessModifier} = translateAccessModifierToPlantUML($self->{name});
 
+  # Replace struct with class for plantuml compatibility
+  $self->{name} =~ s/struct/class/g;
+  
   # Init empty member lists
   $self->{parents}         = ();
   $self->{memberFunctions} = ();
