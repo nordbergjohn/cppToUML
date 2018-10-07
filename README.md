@@ -2,10 +2,22 @@
 Convert C++ files to plantuml
 
 ## Usage:
-Test the script from the git repo-root by running:
+Test the script from the git repo-root by running it with file input:
 
 ```
-perl -Ilib cppToUML example/\* | plantuml -pipe > example.png 
+perl -Ilib cppToUML example/\*
+```
+
+or piped input
+
+```
+cat example/* | perl -Ilib cppToUML.pl
+```
+
+Any of the methods can be combined with plantuml to generate a png by adding an extra pipe
+
+```
+cat example/* | perl -Ilib cppToUML.pl | plantuml -pipe > example.png 
 ```
 
 Where -Ilib is needed to find the StoreClass module.
