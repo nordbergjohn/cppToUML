@@ -1,5 +1,7 @@
 #!/usr/bin/perl
 #StoreClass.pm, Storing class information
+
+use v5;
 use strict;
 use warnings;
 
@@ -46,10 +48,33 @@ sub addParent
   push @{$self->{parents}}, $parentName;
 }
 
+sub addTemplateParameters {
+  my $self     = shift;
+  my $template = shift;
+
+  my $additionalText = "as ";
+  # Get just the classname into additional text
+  my ($class, $className) = split(/ /, $self->{name});
+  $self->{name} = "$class \"$className";
+  $additionalText .= $className;
+
+  # Create template class string
+  $self->{name} .= "<";
+  while($template =~ /(\w+\h+(\w+[,>]))+/g) 
+  {
+    $self->{name} .= $2;
+    $additionalText .= "_$2";
+  }
+  # Clean additional text from , or >
+  $additionalText =~ s/,|>//g;
+  $self->{name} .= "\" $additionalText";
+}
+
 sub addMemberFunction {
   my   $self = shift;
   my   $fun  = shift;
 
+  $fun =~ s/\h\h+/ /g;
   push @{$self->{memberFunctions}}, "$self->{accessModifier} $fun";
 }
 
@@ -57,6 +82,7 @@ sub addMemberVariable {
   my   $self = shift;
   my   $var  = shift;
 
+  $var =~ s/\h\h+/ /g;
   push @{$self->{memberVariables}}, "$self->{accessModifier} $var";
 }
 
@@ -69,6 +95,10 @@ sub changeAccessModifier {
 sub dump {
   my $self = shift;
   my $className = @{[$self->{name} =~ m/\w+/g]}[1];
+  if($self->{name} =~/as (.*)/)
+  {
+    $className = $1;
+  }
 
   # Class opening line
   print"$self->{name} {\n";
@@ -89,6 +119,8 @@ sub dump {
   # Handle inheritance
   foreach my $parent (@{$self->{parents}})
   {
+    $parent =~ s/<|,/_/g;
+    $parent =~ s/>//g;
     print("$parent <|-- $className\n");
   }
 }

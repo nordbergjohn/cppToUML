@@ -1,19 +1,11 @@
 #!/usr/bin/perl
 
-use Getopt::Long;
-
-# Needed on mac to find StoreClass.pm
-use lib '.';
-use StoreClass;
-
-my $help = '';
-GetOptions('h' => \$help, 'help' => \$help);
-#!/usr/bin/perl
+use v5;
+use strict;
+use warnings;
 
 use Getopt::Long;
 
-# Needed on mac to find StoreClass.pm
-use lib '.';
 use StoreClass;
 
 my $help = '';
@@ -59,6 +51,7 @@ foreach(@ARGV)
     my $multiLineInheritance = 0;
     my $multiLineComment = 0;
     my $multiLineVarOrFunc = 0;
+    my $multiLineTemplate = 0;
     my $multiLine = "";
     foreach (<FILE>)
     {
@@ -98,8 +91,51 @@ foreach(@ARGV)
           my $class = $openClasses[-1];
           $multiLineVarOrFunc = 0;
           if(   $multiLine =~ /((?:\w+::)*\w+\h+\w+\(.*\));/) { $class->addMemberFunction($1);    }
-          elsif($multiLine =~ /((?:\w+::)*\w+\h+\w+);/)       { $class->addMemberVariable($1);    }
+          elsif($multiLine =~ /((?:\w+::)*\w+\h+[\w\[\]]+);/)       { $class->addMemberVariable($1);    }
           $multiLine = "";
+        }
+        next;
+      }
+      elsif($multiLineTemplate)
+      {
+        $multiLine .= " $_";
+        # If template <> are balanced and a class definition is on the current line
+        # or a function/variabel declaration is closed by ';'
+        if($multiLine =~ /<(?>[^<>]|(?R))*>/ and 
+           $multiLine =~ /(?>class|struct).*{|;/)
+        {
+          $multiLineTemplate = 0;
+          if($multiLine =~ /class|struct/)
+          {
+            # Create new class
+            if($multiLine =~ /^\h*(template\h*<.*>)\h+(class|struct)\h+(\w+)/)
+            {
+              my $class = new StoreClass("$2 $3");
+              push @openClasses, $class;
+              $class->addTemplateParameters($1);
+
+
+              while($multiLine =~ /(public|private|protected)\h+((?:\w+::)*[\w<>]+)/g)
+              {
+                $class->addParent($1,$2);
+              }
+              # Reset line
+              $multiLine = "";
+            }
+          }
+          elsif($multiLine =~ /;/)
+          {
+            # If there is a class being parsed, the multiline template is a member function or variable
+            if(@openClasses)
+            {
+              my $class = $openClasses[-1];
+              # Add member or variable
+
+            }
+            $multiLine = "";
+            $multiLineTemplate = 0;
+          }
+          
         }
         next;
       }
@@ -111,7 +147,7 @@ foreach(@ARGV)
         next;
       }
 
-      # If no class is being parsed and a class is found
+      # If a class is found
       if($_ =~ /^\h*(class|struct)\h+(\w+)/)
       {
         my $class = new StoreClass("$1 $2");
@@ -133,12 +169,20 @@ foreach(@ARGV)
         next;
       }
 
+      # If a template appears, regardless if an open class exists or not
+      if($_ =~ /^\h*template/)
+      {
+        $multiLine = $_;
+        $multiLineTemplate = 1;
+        next;
+      }
+
       if(@openClasses)
       {
         my $class = $openClasses[-1];
         if($_ =~ /^\h*(public|private|protected):/) { $class->changeAccessModifier($1); }
         elsif($_ =~ /((?:\w+::)*\w+\h+\w+\(.*\));/) { $class->addMemberFunction($1);    }
-        elsif($_ =~ /((?:\w+::)*\w+\h+\w+);/)       { $class->addMemberVariable($1);    }
+        elsif($_ =~ /((?:\w+::)*\w+\h+[\w\[\]]+);/)       { $class->addMemberVariable($1);    }
         elsif($_ =~ /((?:\w+::)*\w+[\w\(,\h]+(?<!;$))/)     # No ending ';', multiline variable or function
         {
             $multiLine = $_;
@@ -155,7 +199,7 @@ foreach(@ARGV)
 }
 
 print "\@startuml\n";
-foreach $class(@classes)
+foreach my $class(@classes)
 {
   bless $class, "StoreClass";
   $class->dump();
