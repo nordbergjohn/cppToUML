@@ -38,10 +38,12 @@ my @classes = ();
 my @openClasses = ();
 
 # My regexes
-my $rClass = qr/^\h*(class|struct)\h+(\w+)/;
-my $rMemberFunction = qr/((?:\w+::)*\w+\h+\w+\(.*\));/;
-my $rMemberVariable = qr/((?:\w+::)*\w+\h+[\w\[\]]+);/;
-my $rParent = qr/(public|private|protected)\h+((?:\w+::)*[\w<>]+)/;
+my $rClass           = qr/^\h*(class|struct)\h+(\w+)/;
+my $rAccessModifier  = qr/^\h*(public|private|protected):/;
+my $rConOrDestructor = qr/^\h*(?>virtual)?\h*([\w~]+\(.*\));/;
+my $rMemberFunction  = qr/((?:\w+::)*\w+\h+\w+\(.*\));/;
+my $rMemberVariable  = qr/((?:\w+::)*\w+\h+[\w\[\]]+);/;
+my $rParent          = qr/(public|private|protected)\h+((?:\w+::)*[\w<>]+)/;
 
 my $multiLineInheritance = 0;
 my $multiLineComment = 0;
@@ -54,6 +56,7 @@ while(<>)
 {
 
   chomp;
+
   # Start of multiline comment
   if($_ =~ /(?:^\h*\/\*).*(?<!\*\/)/) {  $multiLineComment = 1; next; }
 
@@ -84,7 +87,7 @@ while(<>)
   elsif($multiLineVarOrFunc)
   {
     $multiLine .= " $_";
-    if(index($_,';') != -1)
+    if(index($multiLine,';') != -1)
     {
       my $class = $openClasses[-1];
       $multiLineVarOrFunc = 0;
@@ -138,7 +141,7 @@ while(<>)
   }
 
   # When done with a class, go to next line
-  if(@openClasses and $_ =~ /^};$/)
+  if(@openClasses and $_ =~ /^\h*};\h*$/)
   {
     push @classes, pop @openClasses;
     next;
@@ -177,9 +180,10 @@ while(<>)
   if(@openClasses)
   {
     my $class = $openClasses[-1];
-    if($_ =~ /^\h*(public|private|protected):/) { $class->changeAccessModifier($1); }
-    elsif($_ =~ /$rMemberFunction/) { $class->addMemberFunction($1);    }
-    elsif($_ =~ /$rMemberVariable/)       { $class->addMemberVariable($1);    }
+    if   ($_ =~ /$rAccessModifier/)   { $class->changeAccessModifier($1); }
+    elsif($_ =~ /$rConOrDestructor/)  { $class->addMemberFunction($1);    }
+    elsif($_ =~ /$rMemberFunction/)   { $class->addMemberFunction($1);    }
+    elsif($_ =~ /$rMemberVariable/)   { $class->addMemberVariable($1);    }
     elsif($_ =~ /((?:\w+::)*\w+[\w\(,\h]+(?<!;$))/)     # No ending ';', multiline variable or function
     {
       $multiLine = $_;

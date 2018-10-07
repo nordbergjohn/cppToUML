@@ -32,7 +32,7 @@ A class or struct followed by `:` is parsed for inheritance until reading an ope
 
 - [x] Single line member functions
 - [x] single line member variables
-- [ ] Nested classes
+- [x] Nested classes
 - [x] public, private and protected inheritance.
 - [x] public, private and protected access modifiers.
 - [x] Multiline inheritance
