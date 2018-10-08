@@ -22,7 +22,7 @@ cat example/* | perl -Ilib cppToUML.pl | plantuml -pipe > example.png
 
 Where -Ilib is needed to find the StoreClass module. The end result of the above command is:
 
-[[https://github.com/nordbergjohn/cppToUML/blob/master/example/png/example.png]]
+!(https://github.com/nordbergjohn/cppToUML/blob/master/example/png/example.png))
 
 
 ## Assumptions
