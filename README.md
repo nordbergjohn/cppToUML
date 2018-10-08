@@ -5,7 +5,7 @@ Convert C++ files to plantuml
 Test the script from the git repo-root by running it with file input:
 
 ```
-perl -Ilib cppToUML example/\*
+perl -Ilib cppToUML.pl example/\*
 ```
 
 or piped input
@@ -20,7 +20,10 @@ Any of the methods can be combined with plantuml to generate a png by adding an 
 cat example/* | perl -Ilib cppToUML.pl | plantuml -pipe > example.png 
 ```
 
-Where -Ilib is needed to find the StoreClass module.
+Where -Ilib is needed to find the StoreClass module. The end result of the above command is:
+
+[[https://github.com/nordbergjohn/cppToUML/example/png/example.png|alt=plantuml]]
+
 
 ## Assumptions
 Classes/structs and their member parameters and functions all start on a newline with 0 or more space/tab indentation.
@@ -31,14 +34,12 @@ A class or struct followed by `:` is parsed for inheritance until reading an ope
 ## Covers the following cases
 
 - [x] Single line member functions
-- [x] single line member variables
+- [x] Single line member variables
 - [x] Nested classes
-- [x] public, private and protected inheritance.
 - [x] public, private and protected access modifiers.
 - [x] Multiline inheritance
 - [x] Multiline comments using `/**/`
 - [x] Multiline member functions
 - [x] Multiline member variables
 - [x] Template member functions
-- [x] Template member variables
 - [x] Template classes

@@ -2,8 +2,9 @@ class Parent {
   public:
     Parent();
     virtual ~Parent();
+    static void create();
   protected:
-    int m_intVar[N];
+    static int m_intVar[N];
   private:
     struct Nested {
       Nested();

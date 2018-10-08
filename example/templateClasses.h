@@ -19,13 +19,15 @@ struct ChildT : public TemplateClassT<T>,
   //int dump(); <-  Not included in UML as this row is a comment
   protected:
     // Multiline function, should be included in UML
-    ExampleNameSpace::Type function(K k,
+    const ExampleNameSpace::Type function(K k,
       L l,
       M m);
     K m_k;
     L m_l;
-    M m_m;
+    const M m_m;
   private:
+    template<class T, typename Args...>
+      void fun(T& t, Args... args);
     ~ChildT();
     // Multiline variable, should be included in UML
     ExampleNameSpace::Type

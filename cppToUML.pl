@@ -40,28 +40,28 @@ my @openClasses = ();
 # My regexes
 my $rClass           = qr/^\h*(class|struct)\h+(\w+)/;
 my $rAccessModifier  = qr/^\h*(public|private|protected):/;
-my $rConOrDestructor = qr/^\h*(?>virtual)?\h*([\w~]+\(.*\));/;
-my $rMemberFunction  = qr/((?:\w+::)*\w+\h+\w+\(.*\));/;
-my $rMemberVariable  = qr/((?:\w+::)*\w+\h+[\w\[\]]+);/;
+my $rConOrDestructor = qr/^\h*((?>virtual)?\h*[\w~]+\(.*\));/;
+my $rMemberFunction  = qr/((?>const|volatile|static|virtual)\h*?(?:\w+::)*\w+\h+\w+\(.*\));/;
+my $rMemberVariable  = qr/((?>const|volatile|static)?\h*(?:\w+::)*\w+\h+[\w\[\]]+);/;
 my $rParent          = qr/(public|private|protected)\h+((?:\w+::)*[\w<>]+)/;
+my $rEmptyOrComment  = qr/^\h*(?:$|\/\/)/;
 
+# When parsing more than one line at a time
 my $multiLineInheritance = 0;
 my $multiLineComment = 0;
 my $multiLineVarOrFunc = 0;
 my $multiLineTemplate = 0;
 my $multiLine = "";
 
-# Iterate over argv
 while(<>)
 {
-
   chomp;
 
   # Start of multiline comment
   if($_ =~ /(?:^\h*\/\*).*(?<!\*\/)/) {  $multiLineComment = 1; next; }
 
   # Skip if new line is empty or starts with a comment
-  next if $_ =~ /^\h*(?:$|\/\/)/;
+  next if $_ =~ /$rEmptyOrComment/;
 
   if($multiLineComment)
   {
@@ -102,11 +102,9 @@ while(<>)
     $multiLine .= " $_";
     # If template <> are balanced and a class definition is on the current line
     # or a function/variabel declaration is closed by ';'
-    if($multiLine =~ /<(?>[^<>]|(?R))*>/ and 
-      $multiLine =~ /(?>class|struct).*{|;/)
-    {
-      $multiLineTemplate = 0;
-      if($multiLine =~ /class|struct/)
+    if($multiLine =~ /<(?>[^<>]|(?R))*>/)
+    {  
+      if($multiLine =~ /(?>class|struct).*{/)
       {
         # Create new class
         if($multiLine =~ /^\h*(template\h*<.*>)\h+(class|struct)\h+(\w+)/)
@@ -115,23 +113,32 @@ while(<>)
           push @openClasses, $class;
           $class->addTemplateParameters($1);
 
-
           while($multiLine =~ /$rParent/g)
           {
             $class->addParent($1,$2);
           }
           # Reset line
           $multiLine = "";
+          $multiLineTemplate = 0;
         }
       }
       elsif($multiLine =~ /;/)
       {
-        # If there is a class being parsed, the multiline template is a member function or variable
-        if(@openClasses)
+        # If there is a class being parsed and the multiline template is a member function
+        if(@openClasses and $multiLine =~ /(template<(?>[^<>]|(?R))*>)\h*(?>((?:\w+::)*\w+\h+\w+)(\(.*\)));/)
         {
           my $class = $openClasses[-1];
-          # Add member or variable
+          # Add member function
+          my $templateExpression = $1;
+          my $function           = $2;
+          my $parentheses        = $3;
 
+          $function .= "<";
+          while($templateExpression =~ /(\w+\h+([\w\.]+[,>]))+/g) 
+          {
+            $function .= $2;
+          }
+          $class->addMemberFunction("$function$parentheses");
         }
         $multiLine = "";
         $multiLineTemplate = 0;
@@ -180,6 +187,7 @@ while(<>)
   if(@openClasses)
   {
     my $class = $openClasses[-1];
+
     if   ($_ =~ /$rAccessModifier/)   { $class->changeAccessModifier($1); }
     elsif($_ =~ /$rConOrDestructor/)  { $class->addMemberFunction($1);    }
     elsif($_ =~ /$rMemberFunction/)   { $class->addMemberFunction($1);    }
