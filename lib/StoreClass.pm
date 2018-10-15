@@ -22,15 +22,7 @@ sub new
 {
   my $class = shift;
 
-  # Init class or struct
   my $self = { name => shift };
-
-  # class or struct give private or public access modifier
-  $self->{accessModifier} = translateAccessModifierToPlantUML($self->{name});
-
-  # Replace struct with class for plantuml compatibility
-  $self->{name} =~ s/struct/class/g;
-  
   # Init empty member lists
   $self->{parents}         = ();
   $self->{memberFunctions} = ();
@@ -48,42 +40,40 @@ sub addParent
   push @{$self->{parents}}, $parentName;
 }
 
-sub addTemplateParameters {
-  my $self     = shift;
-  my $template = shift;
+sub addClassTemplateParameters {
+  my ($self, @params) = @_;
 
+  # As this becomes a template class, it will use a handle for UML inheritance
+  # e.g., template<class T, typename Args...> class Example will become
+  # 'class "Example<T, Args...>" as Example_T_Args' in plantuml
   my $additionalText = "as ";
-  # Get just the classname into additional text
-  my ($class, $className) = split(/ /, $self->{name});
-  $self->{name} = "$class \"$className";
-  $additionalText .= $className;
+  $additionalText .= $self->{name};
 
   # Create template class string
   $self->{name} .= "<";
-  while($template =~ /(\w+\h+(\w+[,>]))+/g) 
+  foreach (@params) 
   {
-    $self->{name} .= $2;
-    $additionalText .= "_$2";
+    $self->{name} .= "$_, ";
+    $additionalText .= "_$_";
   }
-  # Clean additional text from , or >
-  $additionalText =~ s/,|>//g;
-  $self->{name} .= "\" $additionalText";
+  
+  # Last ', ' should be closing >
+  $self->{name} =~ s/,\h$/>/g;
+  # Remove variadic dots from class name used for inheritance
+  $additionalText =~ s/\.//g;
+  $self->{name} = "\"" . $self->{name} . "\" $additionalText";
 }
 
 sub addMemberFunction {
   my   $self = shift;
-  my   $fun  = shift;
-
-  $fun =~ s/\h\h+/ /g;
-  push @{$self->{memberFunctions}}, "$self->{accessModifier} $fun";
+  
+  push @{$self->{memberFunctions}}, $self->{accessModifier} . shift;
 }
 
 sub addMemberVariable {
   my   $self = shift;
-  my   $var  = shift;
 
-  $var =~ s/\h\h+/ /g;
-  push @{$self->{memberVariables}}, "$self->{accessModifier} $var";
+  push @{$self->{memberVariables}}, $self->{accessModifier} . shift;
 }
 
 sub changeAccessModifier {
@@ -94,23 +84,25 @@ sub changeAccessModifier {
 
 sub dump {
   my $self = shift;
-  my $className = @{[$self->{name} =~ m/\w+/g]}[1];
+  
+  my $className = $self->{name};
+  # If it is a template class, pick out 'alias'
   if($self->{name} =~/as (.*)/)
   {
     $className = $1;
   }
 
   # Class opening line
-  print"$self->{name} {\n";
+  print "class $self->{name} {\n";
 
   # Fill class with member functions and variables
   foreach my $func (@{$self->{memberFunctions}})
   {
-    print("$func\n");
+    print "$func\n";
   }
   foreach my $var (@{$self->{memberVariables}})
   {
-    print("$var\n");
+    print "$var\n";
   }
 
   # Class closing line
@@ -121,7 +113,7 @@ sub dump {
   {
     $parent =~ s/<|,/_/g;
     $parent =~ s/>//g;
-    print("$parent <|-- $className\n");
+    print "$parent <|-- $className\n";
   }
 }
 

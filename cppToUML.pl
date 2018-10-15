@@ -4,200 +4,164 @@ use v5;
 use strict;
 use warnings;
 
-use Getopt::Long;
-
 use StoreClass;
-
-my $help = '';
-GetOptions('h' => \$help, 'help' => \$help);
-
-sub printUsage {
-  print "Usage: \nFile based: perl -Ilib cppToUml.pl <whitespace separated list of files containing C++ classes>\n";
-  print "         Pipe based: <output of process> | perl -Ilib cppToUml.pl\n\n";
-
-  print "Available flags:\n";
-  print "\t-h,-help\tPrint help\n\n";
-}
-
-sub printExample {
-  print "Example usage:\tperl -Ilib cppToUml.pl /path/to/header/file1 /path/to/header/file2\n";
-  print "              \tcat /path/to/header/file1 /path/to/header/file2 | perl -Ilib cppToUml.pl\n";
-  print "Output: \@plantuml output of given input files to stdout\n\n";
-  print "\@startuml\nParentClass <|-- File1\nclass File1 {\n+void publicMember()\n#int protectedVar;\n}\n\n";
-  print "ParentClass2 <|-- File2\nclass File2 {\n-void privateMember()\n}\n\@enduml\n";
-}
-
-if($help)
-{
-  printUsage();
-  printExample();
-  exit;
-}
 
 my @classes = ();
 my @openClasses = ();
 
-# My regexes
-my $rClass           = qr/^\h*(class|struct)\h+(\w+)/;
-my $rAccessModifier  = qr/^\h*(public|private|protected):/;
-my $rConOrDestructor = qr/^\h*((?>virtual)?\h*[\w~]+\(.*\));/;
-my $rMemberFunction  = qr/((?>const|volatile|static|virtual)\h*?(?:\w+::)*\w+\h+\w+\(.*\));/;
-my $rMemberVariable  = qr/((?>const|volatile|static)?\h*(?:\w+::)*\w+\h+[\w\[\]]+);/;
-my $rParent          = qr/(public|private|protected)\h+((?:\w+::)*[\w<>]+)/;
-my $rEmptyOrComment  = qr/^\h*(?:$|\/\/)/;
+# Reocurring regex patterns below
+my $rCVOrStatic       = qr/(?>const|volatile|static)?(?>\h?volatile)?/;
+my $rMatchXNamespaces = qr/(?>\w+::)*/;
+my $rTemplateSpecialization = qr/(?>\w+<\w+>)/;
 
-# When parsing more than one line at a time
-my $multiLineInheritance = 0;
+# Regexes used to identify:
+# Class/struct definition
+# Class/struct closure
+# template class/struct definition
+# Constructor or Destructor
+# Member function
+# Member variable
+# template member function
+my $rAccessModifier  = qr/(public|private|protected):/;
+my $rConOrDestructor = qr/^((?>virtual\h?)?[\w~]+\(.*\)(?>\h?=\h?default|delete)?)/;
+my $rMemberFunction  = qr/((?>virtual)?$rCVOrStatic\h?$rMatchXNamespaces(?>$rTemplateSpecialization|\w+)[\*\&]*\h?(\w+)(\(.*\)))(?>\h*=\h*0|\h*override\h*)?;/;
+my $rMemberVariable  = qr/($rCVOrStatic\h?$rMatchXNamespaces(?>$rTemplateSpecialization|\w+)[ \*\&]+[\w\[\]]+);/;
+my $rParent          = qr/(public|private|protected)\h?($rMatchXNamespaces[\w<>]+)/;
+my $rIsTemplate      = qr/^(template\h?<.*>)/;
+my $rClass           = qr/(class|struct)\h?(\w+)\h?:?$rMatchXNamespaces[\w\h,<>]+{/;
+my $rClassClose      = qr/};$/;
+
+# Matches template parameters
+my $rTemplateParameters = qr/\w+\h?([\w\.]+[,>])/;
+
+# Matches lines that contain namespace definitions or
+# start with a comment or preprocessor directive
+my $rSkipIf          = qr/^\h*(?:$|\/\/|#|namespace)/;
+# Matching opening/closing multi line comments
+my $rOpenMLComment = qr/(?:^\h*\/\*).*(?<!\*\/)/;
+my $rCloseMLComment = qr/\*\//;
+
+# When this matches, the string contains information
+# That should most likely be placed in the UML
+my $rTokenizeString  = qr/(?:{}?|;|$rAccessModifier)$/;
+
+# Keep track when a multiline comment is being parsed
 my $multiLineComment = 0;
-my $multiLineVarOrFunc = 0;
-my $multiLineTemplate = 0;
-my $multiLine = "";
+
+# line gets appended until it matches with $rTokenizeString
+my $line = "";
 
 while(<>)
 {
+  # Remove '\n' from $_
   chomp;
 
-  # Start of multiline comment
-  if($_ =~ /(?:^\h*\/\*).*(?<!\*\/)/) {  $multiLineComment = 1; next; }
+  # If a comment spanning multiple lines begin on this line
+  if($_ =~ /$rOpenMLComment/) {  $multiLineComment = 1; next; }
 
   # Skip if new line is empty or starts with a comment
-  next if $_ =~ /$rEmptyOrComment/;
+  next if $_ =~ /$rSkipIf/;
 
+  # If a multiline comment is currently being parsed
   if($multiLineComment)
   {
-    if($_ =~ /\*\//) { $multiLineComment = 0; }
+    # Check if it is closed on this line
+    if($_ =~ /$rCloseMLComment/) { $multiLineComment = 0; }
+    # Skip to next line regardless if the comment ended or not
     next;
   }
-  elsif($multiLineInheritance)
+  
+  # Append line until regex matches
+  if($_ !~ /$rTokenizeString/)
   {
-    $multiLine .= " $_";
-    if(index($_,'{') != -1)
+    $line .= " $_";
+    next;
+  }
+  
+  # This line will most likely result in an UML entry as the if statement
+  # above matched. $_ is appended to $line which may or may not be empty
+  $line .= " $_";
+  
+  # Replace multiple whitespaces with one
+  $line =~ s/\h\h+/ /g;
+  # Trim initial or trailing whitespace as well
+  $line =~ s/^\h+|\h+$//g;
+
+  if($line =~ /$rClass/)
+  {
+    # Create class
+    my $class = new StoreClass($2);
+    # class or struct will give different results
+    $class->changeAccessModifier($1);
+    # If it is a template class/struct
+    if($line =~ /$rIsTemplate\h?$1/)
     {
-      # As we are parsing inheritance, we know that the array isn't e= mpty
-      my $class = $openClasses[-1];
-      $multiLineInheritance = 0;
-      while($multiLine =~ /$rParent/g)
+      my $templateExpression  = $1;
+      
+      # Collect template parameters in array
+      my @params = ();
+      while($templateExpression =~ /$rTemplateParameters/g)
       {
-        $class->addParent($1,$2);
+        my $parameter;
+        ($parameter = $1) =~ s/,|>//g;
+        push @params, $parameter;
       }
-      $multiLine = "";
+      # Add all parameters to class
+      $class->addClassTemplateParameters(@params);
     }
-    next;
-  }
-  elsif($multiLineVarOrFunc)
-  {
-    $multiLine .= " $_";
-    if(index($multiLine,';') != -1)
-    {
-      my $class = $openClasses[-1];
-      $multiLineVarOrFunc = 0;
-      if(   $multiLine =~ /$rMemberFunction/) { $class->addMemberFunction($1);    }
-      elsif($multiLine =~ /$rMemberVariable/) { $class->addMemberVariable($1);    }
-      $multiLine = "";
-    }
-    next;
-  }
-  elsif($multiLineTemplate)
-  {
-    $multiLine .= " $_";
-    # If template <> are balanced and a class definition is on the current line
-    # or a function/variabel declaration is closed by ';'
-    if($multiLine =~ /<(?>[^<>]|(?R))*>/)
-    {  
-      if($multiLine =~ /(?>class|struct).*{/)
-      {
-        # Create new class
-        if($multiLine =~ /^\h*(template\h*<.*>)\h+(class|struct)\h+(\w+)/)
-        {
-          my $class = new StoreClass("$2 $3");
-          push @openClasses, $class;
-          $class->addTemplateParameters($1);
-
-          while($multiLine =~ /$rParent/g)
-          {
-            $class->addParent($1,$2);
-          }
-          # Reset line
-          $multiLine = "";
-          $multiLineTemplate = 0;
-        }
-      }
-      elsif($multiLine =~ /;/)
-      {
-        # If there is a class being parsed and the multiline template is a member function
-        if(@openClasses and $multiLine =~ /(template<(?>[^<>]|(?R))*>)\h*(?>((?:\w+::)*\w+\h+\w+)(\(.*\)));/)
-        {
-          my $class = $openClasses[-1];
-          # Add member function
-          my $templateExpression = $1;
-          my $function           = $2;
-          my $parentheses        = $3;
-
-          $function .= "<";
-          while($templateExpression =~ /(\w+\h+([\w\.]+[,>]))+/g) 
-          {
-            $function .= $2;
-          }
-          $class->addMemberFunction("$function$parentheses");
-        }
-        $multiLine = "";
-        $multiLineTemplate = 0;
-      }
-    }
-    next;
-  }
-
-  # When done with a class, go to next line
-  if(@openClasses and $_ =~ /^\h*};\h*$/)
-  {
-    push @classes, pop @openClasses;
-    next;
-  }
-
-  # If a class is found
-  if($_ =~ /$rClass/)
-  {
-    my $class = new StoreClass("$1 $2");
-    push @openClasses, $class;
-
-    # If there is inheritance but the class opening braces
-    # aren't on the same line as class definition
-    if(index($_,":") != -1 and index($_,'{') == -1)
-    {
-      $multiLineInheritance = 1;
-      $multiLine = $_;
-      next;
-    }
-
-    while($_ =~ /$rParent/g)
+    
+    # If inheritance is captured
+    while($line =~ /$rParent/g)
     {
       $class->addParent($1,$2);
     }
+     
+    # Add to currently open classes
+    push @openClasses, $class;
+     
+    $line = "";
     next;
   }
 
-  # If a template appears, regardless if an open class exists or not
-  if($_ =~ /^\h*template/)
+  # Only continue with recently closed line if it can be added to a class/struct
+  unless(@openClasses) { $line = ""; next; }
+  
+  if($line =~ /$rClassClose/)
   {
-    $multiLine = $_;
-    $multiLineTemplate = 1;
+    $line = "";
+    push @classes, pop @openClasses;
     next;
   }
+  
+  # If member function or member variable, add to current class
+  my $class = $openClasses[-1];
 
-  if(@openClasses)
-  {
-    my $class = $openClasses[-1];
-
-    if   ($_ =~ /$rAccessModifier/)   { $class->changeAccessModifier($1); }
-    elsif($_ =~ /$rConOrDestructor/)  { $class->addMemberFunction($1);    }
-    elsif($_ =~ /$rMemberFunction/)   { $class->addMemberFunction($1);    }
-    elsif($_ =~ /$rMemberVariable/)   { $class->addMemberVariable($1);    }
-    elsif($_ =~ /((?:\w+::)*\w+[\w\(,\h]+(?<!;$))/)     # No ending ';', multiline variable or function
+  # Add/modify the following for the currently parsed class if they match:
+  # 1. Template member function
+  # 2. Access modifier
+  # 3. Constructor/Destructor
+  # 4. Member function
+  # 5. Member variable
+  if($line =~ /$rIsTemplate\h?$rMemberFunction/) 
+  { 
+    my $templateExpression = $1;
+    my $function = $3;
+    my $parentheses = $4;
+    
+    $function .= "<";
+    while($templateExpression =~ /$rTemplateParameters/g) 
     {
-      $multiLine = $_;
-      $multiLineVarOrFunc = 1;
+      $function .= $1;
     }
+    $class->addMemberFunction("$function$parentheses");
   }
+  elsif($line =~ /$rAccessModifier/)   { $class->changeAccessModifier($1); }
+  elsif($line =~ /$rConOrDestructor/)  { $class->addMemberFunction($1);    }
+  elsif($line =~ /$rMemberFunction/)   { $class->addMemberFunction($1);    }
+  elsif($line =~ /$rMemberVariable/)   { $class->addMemberVariable($1);    }
+  
+  # Clear line
+  $line = "";
 }
 
 print "\@startuml\n";
